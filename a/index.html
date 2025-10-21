@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Alnasri Patient List</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-gray-900 to-black p-10 text-white">
+
+  <h1 class="text-4xl font-extrabold mb-8 text-center text-yellow-400 tracking-wide drop-shadow-md">
+    Alnasri Patient List
+  </h1>
+
+  <!-- Add Form -->
+  <div id="form" class="flex gap-3 mb-6 flex-wrap bg-gray-800/70 p-6 rounded-2xl shadow-lg">
+    <input
+      id="name"
+      type="text"
+      placeholder="Patient Name"
+      class="flex-1 bg-gray-900 border border-gray-700 px-4 py-2 rounded-xl focus:outline-none focus:border-yellow-400 text-white placeholder-gray-400"
+    />
+    <select id="stage" class="bg-gray-900 border border-gray-700 px-4 py-2 rounded-xl focus:outline-none focus:border-yellow-400 text-white">
+      <option value="cusub">Cusub</option>
+      <option value="so labtay">So labtay</option>
+    </select>
+    <select id="service" class="bg-gray-900 border border-gray-700 px-4 py-2 rounded-xl focus:outline-none focus:border-yellow-400 text-white">
+      <option value="gelin">Gelin</option>
+      <option value="buuxin">Buuxin</option>
+      <option value="xirid">Xirid</option>
+      <option value="dhaqid">Dhaqid</option>
+      <option value="bedel">Bedel</option>
+    </select>
+    <button id="addBtn" class="bg-yellow-500 hover:bg-yellow-400 text-black font-semibold px-6 py-2 rounded-xl shadow-md transition">
+      Add
+    </button>
+  </div>
+
+  <!-- Queue Table -->
+  <div class="overflow-x-auto rounded-2xl shadow-xl border border-gray-700">
+    <table class="w-full text-left border-collapse">
+      <thead>
+        <tr class="bg-gray-800 text-yellow-400">
+          <th class="px-4 py-3">Ticket #</th>
+          <th class="px-4 py-3">Name</th>
+          <th class="px-4 py-3">Stage</th>
+          <th class="px-4 py-3">Service</th>
+          <th class="px-4 py-3">Status</th>
+          <th class="px-4 py-3">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="patientsBody">
+        <tr>
+          <td colspan="6" class="text-center py-6 text-gray-400">Loading...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+<script>
+  const API_BASE = '/.netlify/functions';
+
+  async function fetchPatients() {
+    const res = await fetch(`${API_BASE}/getPatients`);
+    if (!res.ok) {
+      alert('Failed to load patients');
+      return [];
+    }
+    return await res.json();
+  }
+
+  async function addPatient(patient) {
+    const res = await fetch(`${API_BASE}/addPatient`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patient),
+    });
+    if (!res.ok) throw new Error('Failed to add patient');
+    return await res.json();
+  }
+
+  async function toggleStatus(id, currentStatus) {
+    const res = await fetch(`${API_BASE}/toggleStatus`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, currentStatus }),
+    });
+    if (!res.ok) throw new Error('Failed to toggle status');
+    return await res.json();
+  }
+
+  async function deletePatient(id) {
+    const res = await fetch(`${API_BASE}/deletePatient`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    if (!res.ok) throw new Error('Failed to delete patient');
+    return await res.json();
+  }
+
+  function renderPatients(patients) {
+    const tbody = document.getElementById('patientsBody');
+    tbody.innerHTML = '';
+
+    if (patients.length === 0) {
+      tbody.innerHTML = `<tr>
+        <td colspan="6" class="text-center py-6 text-gray-400">No patients in queue</td>
+      </tr>`;
+      return;
+    }
+
+    patients.forEach(p => {
+      const tr = document.createElement('tr');
+      tr.className = p.status === 'done' ? 'bg-green-900/50 text-green-300' : 'bg-gray-900/60';
+      tr.classList.add('hover:bg-gray-700/50', 'transition');
+
+      tr.innerHTML = `
+        <td class="px-4 py-3 font-mono">${p.ticket_number}</td>
+        <td class="px-4 py-3">${p.name}</td>
+        <td class="px-4 py-3 capitalize">${p.stage}</td>
+        <td class="px-4 py-3 capitalize">${p.service}</td>
+        <td class="px-4 py-3 capitalize">${p.status}</td>
+        <td class="px-4 py-3 space-x-2">
+          <button class="bg-green-500 hover:bg-green-400 text-black font-semibold px-3 py-1 rounded-lg shadow toggle-btn">Toggle</button>
+          <button class="bg-red-500 hover:bg-red-400 text-black font-semibold px-3 py-1 rounded-lg shadow delete-btn">Delete</button>
+        </td>
+      `;
+
+      const toggleBtn = tr.querySelector('.toggle-btn');
+      toggleBtn.addEventListener('click', async () => {
+        try {
+          await toggleStatus(p.id, p.status);
+          await loadPatients();
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+
+      const deleteBtn = tr.querySelector('.delete-btn');
+      deleteBtn.addEventListener('click', async () => {
+        if (!confirm(`Delete patient ${p.name}?`)) return;
+        try {
+          await deletePatient(p.id);
+          await loadPatients();
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function loadPatients() {
+    try {
+      const patients = await fetchPatients();
+      renderPatients(patients);
+    } catch {
+      alert('Error loading patients');
+    }
+  }
+
+  document.getElementById('addBtn').addEventListener('click', async () => {
+    const name = document.getElementById('name').value.trim();
+    const stage = document.getElementById('stage').value;
+    const service = document.getElementById('service').value;
+
+    if (!name) {
+      alert('Please enter patient name');
+      return;
+    }
+
+    try {
+      await addPatient({ name, stage, service });
+      document.getElementById('name').value = '';
+      document.getElementById('stage').value = 'cusub';
+      document.getElementById('service').value = 'gelin';
+      await loadPatients();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  loadPatients();
+</script>
+
+</body>
+</html>
